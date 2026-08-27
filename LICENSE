@@ -1,0 +1,42 @@
+MIT License
+
+Copyright (c) 2026 Yobsan Bayisa Leta, Christos Kyrkou, Maria K. Michael,
+Theocharis Theocharides — University of Cyprus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---------------------------------------------------------------------------
+
+This licence covers the LiDSeg framework itself: models/lidseg.py,
+models/dehazeformer.py, models/lgf.py, models/loss.py, and the train/, configs/,
+scripts/, evaluation/, tools/, latency/ and tests/ directories, together with
+dataset/loader.py and dataset/segdatasets/acdc.py.
+
+It does NOT cover the following, which are derivative works of other projects
+and remain under their own licences:
+
+  * models/segmodels/ -- ports of third-party segmentation backbones.
+  * dataset/transforms/transforms.py, dataset/segdatasets/base_dataset.py,
+    dataset/segdatasets/cityscapes.py and dataset/segdatasets/utils.py --
+    derived from panoptic-deeplab and tensorflow/models (Apache-2.0).
+
+
+No datasets and no pretrained weights are distributed with this repository.
+Each is governed by the licence of its original provider; see the "Datasets"
+section of README.md.

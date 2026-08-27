@@ -1,0 +1,85 @@
+exp_name: cityscapes_foggy
+seed: 42
+backbone: bisenetv2
+n_classes: 19
+ignore_index: 255
+
+guidance: true
+use_decoder: true
+guidance_depths: [4, 6, 6]
+
+cityscapes_root: null
+acdc_root: null
+crop_h: 512
+crop_w: 1024
+batch_size: 6
+validation_full_res: true
+val_batch_size: 1
+num_workers: 4
+replay_batch_size: 3
+replay_ratio_semantics: total_sample_fraction
+pretrain_path: null
+
+opt: adamw
+base_lr: 1.0e-3
+weight_decay: 1.0e-4
+backbone_lr_mult: 0.01
+guidance_lr_mult: 1.0
+fusion_lr_mult: 1.0
+grad_clip: 1.0
+grad_accum: 4
+amp: true
+sched: cosine
+warmup_iters: 500
+min_lr_ratio: 0.01
+
+loss_weighting: uncertainty
+lambda_segmentation: 1.0
+lambda_reconstruction: 1.0
+lambda_lovasz: 0.5
+lambda_aux: 0.4
+use_ohem: false
+
+log_every: 50
+val_every: 1
+grad_log_every: 200
+tensorboard: true
+ddp_find_unused: true
+early_stop_patience: 10
+
+stages:
+  - name: "Stage 0: clear validation only"
+    dataset: cityscapes_foggy
+    beta: "clear"
+    epochs: 0
+    validate_only: true
+    lr_multiplier: 1.0
+    replay_ratio: 0.0
+    init: pretrain
+  - name: "Stage 1: beta=0.005 (light fog)"
+    dataset: cityscapes_foggy
+    beta: "0.005"
+    epochs: 200
+    lr_multiplier: 1.0
+    dual_stream: true
+    replay_ratio: 0.10
+    replay_from: ["clear"]
+    init: prev_stage
+  - name: "Stage 2: beta=0.01 (medium fog)"
+    dataset: cityscapes_foggy
+    beta: "0.01"
+    epochs: 100
+    lr_multiplier: 0.6
+    dual_stream: true
+    replay_ratio: 0.30
+    replay_from: ["clear", "0.005"]
+    init: prev_stage
+  - name: "Stage 3: beta=0.02 (dense fog)"
+    dataset: cityscapes_foggy
+    beta: "0.02"
+    epochs: 100
+    lr_multiplier: 0.5
+    dual_stream: true
+    replay_ratio: 0.30
+    replay_from: ["clear", "0.005", "0.01"]
+    init: prev_stage

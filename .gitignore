@@ -1,0 +1,65 @@
+# Machine-specific dataset paths (copy from configs/paths.env.example)
+configs/paths.env
+.env
+.env.*
+!.env.example
+.envrc
+
+# Credentials and signing material
+*.pem
+*.key
+*.p12
+*.pfx
+*.token
+secrets/
+credentials/
+
+# Training artefacts
+output/
+OUTPUT/
+runs/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.onnx
+*.engine
+*.trt
+*.plan
+*.part
+events.out.tfevents.*
+lightning_logs/
+wandb/
+mlruns/
+artifacts/
+checkpoints/
+
+# Pretrained third-party weights (fetched via tools/fetch_pretrained.py)
+pretrained/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.ipynb_checkpoints/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo

@@ -1,0 +1,58 @@
+exp_name: acdc
+seed: 42
+backbone: bisenetv2
+n_classes: 19
+ignore_index: 255
+
+guidance: true
+use_decoder: false
+active_recon: false
+guidance_depths: [4, 6, 6]
+
+cityscapes_root: null
+acdc_root: null
+crop_h: 512
+crop_w: 1024
+batch_size: 8
+validation_full_res: true
+val_batch_size: 1
+num_workers: 4
+replay_batch_size: 4
+replay_ratio_semantics: total_sample_fraction
+pretrain_path: null
+
+opt: adamw
+base_lr: 4.0e-4
+weight_decay: 1.0e-4
+backbone_lr_mult: 1.0
+guidance_lr_mult: 1.0
+fusion_lr_mult: 1.0
+grad_clip: 1.0
+grad_accum: 2
+amp: true
+sched: cosine
+warmup_iters: 500
+min_lr_ratio: 0.01
+
+loss_weighting: uncertainty
+lambda_segmentation: 1.0
+lambda_reconstruction: 0.0
+lambda_lovasz: 0.5
+lambda_aux: 0.4
+use_ohem: false
+
+log_every: 50
+val_every: 1
+grad_log_every: 200
+tensorboard: true
+ddp_find_unused: true
+early_stop_patience: 20
+
+stages:
+  - name: "ACDC"
+    dataset: acdc
+    conditions: [fog, night, rain, snow]
+    epochs: 100
+    lr_multiplier: 1.0
+    replay_ratio: 0.0
+    init: full_ckpt
