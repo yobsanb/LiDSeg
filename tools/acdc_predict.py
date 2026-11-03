@@ -1,16 +1,4 @@
-"""ACDC inference with test-time augmentation: val scoring and benchmark submission.
-
-Both modes share one inference path, so what is scored on val is exactly what writes the
-submission. Test-time augmentation averages the softmax over input scales and horizontal
-flips at native 1080x1920 resolution.
-
-    # score a TTA setting on the labelled val set (406 images)
-    python tools/acdc_tta.py val --checkpoint CKPT --scales 0.5 0.75 1 1.25 1.5 1.75 --flip
-    # ACDC semantic-segmentation submission: DIR/labelTrainIds/<cond>/<seq>/<frame>_labelTrainIds.png
-    python tools/acdc_tta.py submit --checkpoint CKPT --scales ... --flip --out_root DIR
-
-``--conditions`` restricts the run to some conditions, so the four can run on four GPUs.
-"""
+"""ACDC val scoring and test predictions."""
 
 from __future__ import annotations
 
@@ -34,17 +22,20 @@ from torch.utils.data import DataLoader, Dataset  # noqa: E402
 from configs.paths import load as load_paths  # noqa: E402
 from evaluation._common import (  # noqa: E402
     ACDC_CONDITIONS,
+    CS_CLASSES,
     NUM_CLASSES,
     build_model_from_checkpoint,
 )
+from tools.infer import load_model  # noqa: E402
 
 _MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 IGNORE = 255
+SCALES = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
 
 
 class _AcdcImages(Dataset):
-    """Native-resolution ACDC images of one condition and split, labels when present."""
+    """ACDC images and labels, native resolution."""
 
     def __init__(self, root: str, condition: str, split: str):
         self.files = sorted(glob.glob(
@@ -73,8 +64,8 @@ class _AcdcImages(Dataset):
 
 
 @torch.no_grad()
-def tta_probs(model, x: torch.Tensor, scales, flip: bool, amp: bool) -> torch.Tensor:
-    """Softmax averaged over scales x {identity, h-flip}, at the input resolution."""
+def predict_probs(model, x: torch.Tensor, scales, flip: bool, amp: bool) -> torch.Tensor:
+    """Softmax averaged over scales and flips."""
     h, w = x.shape[-2:]
     acc, n = None, 0
     for s in scales:
@@ -103,34 +94,43 @@ def _hist(label: np.ndarray, pred: np.ndarray) -> np.ndarray:
                        minlength=NUM_CLASSES ** 2).reshape(NUM_CLASSES, NUM_CLASSES)
 
 
-def _miou(hist: np.ndarray) -> float:
+def _iou(hist: np.ndarray) -> np.ndarray:
     with np.errstate(divide="ignore", invalid="ignore"):
-        iou = np.diag(hist) / (hist.sum(0) + hist.sum(1) - np.diag(hist))
-    return float(np.nanmean(iou) * 100.0)
+        return np.diag(hist) / (hist.sum(0) + hist.sum(1) - np.diag(hist)) * 100.0
+
+
+def _miou(hist: np.ndarray) -> float:
+    return float(np.nanmean(_iou(hist)))
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("mode", choices=["val", "submit"])
-    p.add_argument("--checkpoint", required=True, type=Path)
-    p.add_argument("--scales", type=float, nargs="+", default=[1.0])
-    p.add_argument("--flip", action="store_true")
-    p.add_argument("--amp", action="store_true", help="fp16 autocast (faster)")
+    p.add_argument("mode", choices=["val", "test"])
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--checkpoint", type=Path, help="training checkpoint (best.pth)")
+    src.add_argument("--weights", type=Path, help="released weights file")
+    p.add_argument("--scales", type=float, nargs="+", default=SCALES)
+    p.add_argument("--flip", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--amp", action=argparse.BooleanOptionalAction, default=True,
+                   help="fp16 autocast")
     p.add_argument("--conditions", nargs="+", default=list(ACDC_CONDITIONS))
     p.add_argument("--out_root", type=Path, default=None)
     p.add_argument("--out_json", type=Path, default=None)
     p.add_argument("--num_workers", type=int, default=4)
     args = p.parse_args()
-    if args.mode == "submit" and args.out_root is None:
-        p.error("submit needs --out_root")
+    if args.mode == "test" and args.out_root is None:
+        p.error("test needs --out_root")
 
     root = load_paths()["ACDC_ROOT"]
     device = torch.device("cuda")
-    model, _, _ = build_model_from_checkpoint(str(args.checkpoint),
-                                              expected_n_classes=NUM_CLASSES)
+    if args.weights is not None:
+        model = load_model(args.weights)
+    else:
+        model, _, _ = build_model_from_checkpoint(str(args.checkpoint),
+                                                  expected_n_classes=NUM_CLASSES)
     model = model.to(device).eval()
-    split = "val" if args.mode == "val" else "test"
-    report = {"mode": args.mode, "checkpoint": str(args.checkpoint),
+    split = args.mode
+    report = {"mode": args.mode, "model": str(args.weights or args.checkpoint),
               "scales": args.scales, "flip": args.flip, "amp": args.amp,
               "split": split, "per_condition": {}}
     pooled = np.zeros((NUM_CLASSES, NUM_CLASSES), np.int64)
@@ -142,8 +142,8 @@ def main() -> int:
         hist = np.zeros((NUM_CLASSES, NUM_CLASSES), np.int64)
         written = 0
         for batch in dl:
-            probs = tta_probs(model, batch["image"].to(device, non_blocking=True),
-                              args.scales, args.flip, args.amp)
+            probs = predict_probs(model, batch["image"].to(device, non_blocking=True),
+                                  args.scales, args.flip, args.amp)
             pred = probs.argmax(1)[0].cpu().numpy().astype(np.uint8)
             if args.mode == "val":
                 hist += _hist(batch["label"][0].numpy(), pred.astype(np.int64))
@@ -172,6 +172,8 @@ def main() -> int:
         report["pooled_miou"] = _miou(pooled)
         print(f"  all: mIoU {report['pooled_miou']:6.2f}", flush=True)
     if args.mode == "val":
+        report["per_class_iou"] = {c: (None if np.isnan(v) else round(float(v), 2))
+                                   for c, v in zip(CS_CLASSES, _iou(pooled))}
         report["hist"] = pooled.tolist()
     report["seconds"] = round(time.time() - t0, 1)
     out_json = args.out_json or (args.out_root / f"{args.mode}_report.json" if args.out_root else None)

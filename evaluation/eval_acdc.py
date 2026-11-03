@@ -89,10 +89,10 @@ class _AcdcTestSet(Dataset):
         }
 
 
-def _save_acdc_submission_png(
+def _save_acdc_test_png(
     pred: np.ndarray, src_path: str, out_root: Path,
 ) -> Path:
-    """Write a uint8 trainId map to the official ACDC submission path."""
+    """Write a uint8 trainId map for one ACDC test image."""
     p = Path(src_path)
     stem = p.stem.replace("_rgb_anon", "")
     parents = list(p.parents)
@@ -155,13 +155,13 @@ def predict_test(
                     li, size=(h0, w0), mode="bilinear", align_corners=False,
                 )
             pred = li.argmax(1)[0].cpu().numpy().astype(np.uint8)
-            _save_acdc_submission_png(
+            _save_acdc_test_png(
                 pred, batch["path"][i], out_root,
             )
             n_written += 1
     if n_written != len(ds):
         raise RuntimeError(
-            f"ACDC submission wrote {n_written} predictions for {len(ds)} "
+            f"ACDC test inference wrote {n_written} predictions for {len(ds)} "
             f"{condition!r} test images")
     return n_written
 
@@ -169,7 +169,7 @@ def predict_test(
 def main() -> int:
     p = argparse.ArgumentParser(
         description="Evaluate one ACDC experiment on val (mIoU) and/or "
-                    "test (predictions for submission).",
+                    "test (predictions for the ACDC benchmark).",
     )
     p.add_argument(
         "--exp_dir", required=True,
@@ -179,7 +179,7 @@ def main() -> int:
         "--split", choices=["val", "test", "both"], default="both",
         help=("Which ACDC split to evaluate. Default: both. "
               "test has no public labels — predictions are written for "
-              "submission to the ACDC benchmark."),
+              "evaluation on the ACDC benchmark server."),
     )
     p.add_argument("--crop_h", type=int, default=512)
     p.add_argument("--crop_w", type=int, default=1024)
@@ -188,7 +188,7 @@ def main() -> int:
     p.add_argument(
         "--crop_eval", action="store_true",
         help="Use a centre crop / resized test input instead of native resolution. "
-             "Default: native-resolution validation and submission inference.",
+             "Default: native-resolution validation and test inference.",
     )
     p.add_argument(
         "--out", default=None,
@@ -295,9 +295,8 @@ def main() -> int:
         out["test"] = {
             "predictions_root": repo_relative(preds_root),
             "counts": {},
-            "note": ("ACDC test labels are not public; submit the saved "
-                     "predictions to the ACDC benchmark for an official "
-                     "test mIoU."),
+            "note": ("ACDC test labels are not public; the saved predictions "
+                     "are scored by the ACDC benchmark server."),
         }
         for c in conds:
             n = predict_test(
@@ -311,7 +310,7 @@ def main() -> int:
             )
             if n < 1:
                 raise RuntimeError(
-                    f"ACDC submission generated zero predictions for {c!r}")
+                    f"ACDC test inference generated zero predictions for {c!r}")
             target = preds_root / c / "test"
             print(
                 f"  test | {c:>5}: wrote {n} prediction(s) under {target}"

@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Step 2: LiDSeg PIDNet-L on ACDC Uber (fog/night/rain/snow) from the step-1 dense-fog
-# checkpoint, then a single-checkpoint, native-resolution val report per condition.
-# The run dir is named "<backbone>_norecon_uber_<tag>" because the decoder is dropped on
-# unpaired ACDC; evaluation/eval_acdc.py derives the variant from that name.
-# Resumable: re-running continues an interrupted run; a finished run is skipped.
+# Step 2: ACDC fine-tuning from step 1, resumable.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

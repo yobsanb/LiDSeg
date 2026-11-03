@@ -1,13 +1,4 @@
-"""Download the official OpenMMLab PIDNet-L Cityscapes checkpoint and write its weights.
-
-The mmseg file also pickles mmengine training-log objects, which the trainer's
-``weights_only`` loader rejects. This extracts the tensor ``state_dict`` with a
-restricted unpickler (only torch/collections globals resolve; everything else is
-an inert stub, so nothing from the download executes) and writes a weights-only
-file that the trainer loads safely.
-
-    python tools/prepare_pidnetl_weights.py
-"""
+"""Download OpenMMLab PIDNet-L Cityscapes weights, weights-only."""
 
 from __future__ import annotations
 

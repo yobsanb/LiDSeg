@@ -1,13 +1,4 @@
-"""Validate an ACDC semantic-segmentation submission folder and zip it.
-
-Checks the rules of https://acdc.vision.ee.ethz.ch/submit (semantic segmentation, "all"):
-exactly one PNG per test image (2000) under ``labelTrainIds/``, file names starting with
-the test frame name (``GOPR0364_frame_000021*.png``, never ``*_ref_*``), 1920x1080,
-8-bit, trainIds 0..18, and a zip below the 200 MB limit.
-
-    python tools/acdc_package_submission.py --sub_dir output/acdc_submission/<name>
-    # -> <name>.zip next to the folder, containing labelTrainIds/...
-"""
+"""Validate and zip ACDC test predictions."""
 
 from __future__ import annotations
 
@@ -26,13 +17,13 @@ sys.path.insert(0, str(REPO))
 
 from configs.paths import load as load_paths  # noqa: E402
 
-SIZE_LIMIT = 200_000_000  # bytes, semantic segmentation (site: sizeLimits.semseg = 2e8)
+SIZE_LIMIT = 200_000_000  # benchmark zip limit, bytes
 CONDITIONS = ("fog", "night", "rain", "snow")
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--sub_dir", type=Path, required=True)
+    p.add_argument("--pred_dir", type=Path, required=True)
     p.add_argument("--zip", type=Path, default=None)
     args = p.parse_args()
 
@@ -44,13 +35,13 @@ def main() -> int:
     if len(frames) != 2000:
         raise SystemExit(f"expected 2000 ACDC test frames, found {len(frames)}")
 
-    preds = sorted(glob.glob(str(args.sub_dir / "labelTrainIds" / "**" / "*.png"), recursive=True))
+    preds = sorted(glob.glob(str(args.pred_dir / "labelTrainIds" / "**" / "*.png"), recursive=True))
     matched = {}
     for f in preds:
         name = os.path.basename(f)
         if "_ref_" in name:
             raise SystemExit(f"{f}: '_ref_' names are reserved for normal-condition images")
-        frame = "_".join(name.split("_")[:3])          # GOPRxxxx_frame_xxxxxx
+        frame = "_".join(name.split("_")[:3])  # GOPRxxxx_frame_xxxxxx
         if frame not in frames:
             raise SystemExit(f"{f}: does not start with an ACDC test frame name")
         if frame in matched:
@@ -71,12 +62,11 @@ def main() -> int:
     per_cond = {c: sum(1 for fr in matched if frames[fr] == c) for c in CONDITIONS}
     print(f"OK: {len(preds)} predictions {per_cond}, trainIds 0..18, 1920x1080 8-bit")
 
-    zpath = args.zip or args.sub_dir.parent / f"{args.sub_dir.name}.zip"
-    rel = [Path(f).relative_to(args.sub_dir) for f in preds]
+    zpath = args.zip or args.pred_dir.parent / f"{args.pred_dir.name}.zip"
+    rel = [Path(f).relative_to(args.pred_dir) for f in preds]
     dirs = sorted({d for r in rel for d in r.parents if d != Path(".")})
     with zipfile.ZipFile(zpath, "w", compression=zipfile.ZIP_DEFLATED) as z:
-        # Explicit folder entries, as `zip -r` writes them, so labelTrainIds/ is itself
-        # an entry of the archive and not only a prefix of the file names.
+        # explicit folder entries, like zip -r
         for d in dirs:
             entry = zipfile.ZipInfo(d.as_posix().rstrip("/") + "/")
             entry.external_attr = (0o40777 << 16) | 0x10

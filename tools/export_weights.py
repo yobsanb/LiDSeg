@@ -1,10 +1,4 @@
-"""Export a training checkpoint as a weights-only file (no optimiser state).
-
-The result is what the ACDC submission form's "Model File" field takes (limit 600 MB):
-the deployed model's state_dict plus the architecture record needed to rebuild it.
-
-    python tools/export_weights.py --checkpoint output/acdc/<run>/best.pth --out model.pth
-"""
+"""Export checkpoint as released weights file."""
 
 from __future__ import annotations
 

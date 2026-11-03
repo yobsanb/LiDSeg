@@ -211,7 +211,7 @@ class LiDSegModel(nn.Module):
 
     @torch.no_grad()
     def predict(self, x: Tensor, return_recon: bool = False):
-        """Deployed inference path: backbone, guidance encoder and LGF.
+        """Inference path: backbone, guidance encoder and LGF.
 
         ``return_recon=True`` also runs the decoder and returns ``(logits, recon)``.
         """

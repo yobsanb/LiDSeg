@@ -1,10 +1,10 @@
 # Step 2 - LiDSeg PIDNet-L on ACDC, Uber (all four conditions), from the step-1 dense-fog
 # checkpoint. ACDC has no clear pairs, so the reconstruction decoder is dropped and only the
-# segmentation loss trains; the guidance encoder + LGF stay in the deployed model.
+# segmentation loss trains; the guidance encoder + LGF stay at inference.
 # Learning rate: the backbone (incl. PIDNet heads, 37.3M of 39.6M parameters) trains at 0.1x
 # (4e-5), guidance and LGF at 4e-4. The BiSeNetV2 paper setting (4e-4 on everything) erased
 # the step-1 model within two epochs (val 44.7 -> 32.5); 1e-4 on everything learned slower
-# (59.7 vs 65.9 at epoch 5). Result: val 74.49 single-scale, 76.62 with TTA (step 3).
+# (59.7 vs 65.9 at epoch 5).
 # DDP split: 2 GPUs x batch 8 x accum 1 = 16 per step (reference 1 GPU x 8 x accum 2);
 # warmup 250 optimizer steps (reference 500 micro-batches / accum 2).
 exp_name: lidseg_pidnetl_step2_acdc_uber_bblr0.1
