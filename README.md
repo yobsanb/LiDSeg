@@ -20,8 +20,7 @@ This release uses PIDNet-L as the segmentation backbone. PIDNet-L can be replace
 - **Reconstruction decoder** (`models/dehazeformer.py`): training-only Restormer-style decoder with PixelShuffle upsampling and residual reconstruction.
 - **LGF** (`models/lgf.py`): channel-wise gated fusion at s8/s16/s32 with learnable per-stage scaling.
 - **Losses** (`models/loss.py`): OHEM cross-entropy, Lovász-Softmax, auxiliary segmentation loss, Charbonnier reconstruction loss, and uncertainty weighting.
-- **Backbone** (`models/segmodels/`): PIDNet-L. To use another network, register it with `@register_model()` and add its s8/s16/s32 feature taps to `feature_registry.py`.
-- **Wrapper** (`models/lidseg.py`): connects the backbone, guidance branch, and LGF. Set `guidance=False` for the unguided baseline.
+- **Wrapper** (`models/lidseg.py`): connects the segmentation, guidance branch, and LGF. Set `guidance=False` for the unguided baseline.
 
 ## Installation
 
@@ -42,7 +41,7 @@ Datasets are not redistributed. Obtain them from the official sources.
 | Cityscapes + Foggy Cityscapes | Paired pretraining | [Cityscapes](https://www.cityscapes-dataset.com/) |
 | ACDC | Fine-tuning and evaluation | [ACDC](https://acdc.vision.ee.ethz.ch/) |
 
-Labels must use Cityscapes `trainIds` (19 classes, `255` ignore). For Cityscapes, generate them with [cityscapesScripts](https://github.com/mcordts/cityscapesScripts) (`csCreateTrainIdLabelImgs`). Configure paths once:
+Labels use Cityscapes `trainIds` (19 classes, `255` ignore). For Cityscapes, generate them with [cityscapesScripts](https://github.com/mcordts/cityscapesScripts) (`csCreateTrainIdLabelImgs`). Configure paths once:
 
 ```bash
 cp configs/paths.env.example configs/paths.env
@@ -77,7 +76,7 @@ Predictions are saved as Cityscapes `trainIds`; `--color` also saves color maps.
 
 ### Stage 1: Foggy Cityscapes
 
-Paired clear/foggy training with the progressive fog curriculum `0.005 -> 0.01 -> 0.02`, initialized from the Cityscapes PIDNet-L weights:
+Paired clear/foggy training with the progressive fog curriculum `0.005 -> 0.01 -> 0.02`
 
 ```bash
 python tools/prepare_pidnetl_weights.py
@@ -105,11 +104,6 @@ GPUS=0,1 scripts/step3_acdc_benchmark.sh
 ```
 
 Output goes to `output/acdc_benchmark`.
-
-| Config | Used by |
-|---|---|
-| `configs/pidnetl_step1_foggy_cityscapes.yml` | Stage 1, 4 GPUs |
-| `configs/pidnetl_step2_acdc_uber_bblr0.1.yml` | Stage 2, 2 GPUs |
 
 ## Evaluation
 
@@ -162,4 +156,4 @@ Datasets are not redistributed and remain subject to their own licenses.
 
 This work has received funding from the European Union's Horizon Europe research and innovation programme under the Marie Skłodowska-Curie grant agreement No. 101169378 (TIRAMISU Doctoral Network), by the European Union's Horizon 2020 research and innovation programme under grant agreement No. 739551 (KIOS CoE), and from the Government of the Republic of Cyprus through the Cyprus Deputy Ministry of Research, Innovation and Digital Policy.
 
-LiDSeg builds on [BiSeNetV2](https://github.com/CoinCheung/BiSeNet), [DDRNet](https://github.com/ydhongHIT/DDRNet), [STDC-Seg](https://github.com/MichaelFan01/STDC-Seg), [SCTNet](https://github.com/xzz777/SCTNet), [PIDNet](https://github.com/XuJiacong/PIDNet), [MMSegmentation](https://github.com/open-mmlab/mmsegmentation), [panoptic-deeplab](https://github.com/bowenc0221/panoptic-deeplab), [LovaszSoftmax](https://github.com/bermanmaxim/LovaszSoftmax), [DehazeFormer](https://github.com/IDKiro/DehazeFormer), [Restormer](https://github.com/swz30/Restormer), and [cityscapesScripts](https://github.com/mcordts/cityscapesScripts).
+LiDSeg builds on [BiSeNetV2](https://github.com/CoinCheung/BiSeNet), [DDRNet-23s](https://github.com/ydhongHIT/DDRNet), [STDC1-Seg](https://github.com/MichaelFan01/STDC-Seg), [PIDNet-L](https://github.com/XuJiacong/PIDNet), [TopFormer-B](https://github.com/hustvl/Topformer), and [SeaFormer-B](https://github.com/fudan-zvg/SeaFormer). The implementation utilized [MMSegmentation](https://github.com/open-mmlab/mmsegmentation), [Panoptic-DeepLab](https://github.com/bowenc0221/panoptic-deeplab), [LovaszSoftmax](https://github.com/bermanmaxim/LovaszSoftmax), [DehazeFormer](https://github.com/IDKiro/DehazeFormer), [Restormer](https://github.com/swz30/Restormer), and [cityscapesScripts](https://github.com/mcordts/cityscapesScripts).
