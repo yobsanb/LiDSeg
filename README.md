@@ -4,7 +4,7 @@
 
 BMVC 2026 · Yobsan Bayisa Leta, Christos Kyrkou, Maria K. Michael, Theocharis Theocharides · University of Cyprus
 
-This repository releases the official **LiDSeg (PIDNet-L)** model submitted to the [ACDC benchmark](https://acdc.vision.ee.ethz.ch/submissions/6ac8c8bb3041fc0c1fd88257): **74.73 mIoU** on the ACDC test set (task *all*).
+This repository releases **LiDSeg (PIDNet-L)** model submitted to the [ACDC benchmark](https://acdc.vision.ee.ethz.ch/submissions/6ac8c8bb3041fc0c1fd88257): **74.73 mIoU** on the ACDC test set (task *all*).
 
 ![LiDSeg architecture](docs/architecture.png)
 
