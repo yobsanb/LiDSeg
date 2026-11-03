@@ -13,74 +13,15 @@ __all__ = [
 ]
 
 BACKBONE_FEATURES: Dict[str, Dict] = {
-    "bisenetv2": {
-        "has_aux": True,
-        "features": {
-            "s8":  ("segment.S3",   32),
-            "s16": ("segment.S4",   64),
-            "s32": ("segment.S5_4", 128),
-        },
-    },
-
-    "ddrnet": {
-        "has_aux": True,
-        "features": {
-            "s8":  ("model.layer2",  64),
-            "s16": ("model.layer3", 128),
-            "s32": ("model.layer4", 256),
-        },
-    },
-    "stdc": {
-        "has_aux": True,
-        "features": {
-            "s8":  ("cp.backbone.x8",   256),
-            "s16": ("cp.backbone.x16",  512),
-            "s32": ("cp.backbone.x32", 1024),
-        },
-    },
-
-    "sctnets": {
-        "has_aux": False,
-        "features": {
-            "s8":  ("encoder_s8",  128),
-            "s16": ("encoder_s16", 128),
-            "s32": ("encoder_s32", 256),
-        },
-    },
-    "sctnetb": {
-        "has_aux": False,
-        "features": {
-            "s8":  ("encoder_s8",  256),
-            "s16": ("encoder_s16", 256),
-            "s32": ("encoder_s32", 512),
-        },
-    },
-
-    "pidnets": {
-        "has_aux": True,
-        "features": {
-            "s8":  ("p_branch_layers.2", 128),  # 4*c after Bottleneck (c=32)
-            "s16": ("i_branch_layers.0", 128),  # 4*c, stride 16
-            "s32": ("i_branch_layers.1", 256),  # 8*c, stride 32
-        },
-    },
-    "pidnetm": {
-        "has_aux": True,
-        "features": {
-            "s8":  ("p_branch_layers.2", 256),  # 4*c (c=64)
-            "s16": ("i_branch_layers.0", 256),
-            "s32": ("i_branch_layers.1", 512),
-        },
-    },
+    # PIDNet-L (c=64): s8 = P-branch before the DFM fusion, s16/s32 = I-branch stages.
     "pidnetl": {
         "has_aux": True,
         "features": {
-            "s8":  ("p_branch_layers.2", 256),  # 4*c (c=64)
-            "s16": ("i_branch_layers.0", 256),
-            "s32": ("i_branch_layers.1", 512),
+            "s8":  ("p_branch_layers.2", 256),  # 4*c after Bottleneck
+            "s16": ("i_branch_layers.0", 256),  # 4*c, stride 16
+            "s32": ("i_branch_layers.1", 512),  # 8*c, stride 32
         },
     },
-
 }
 
 

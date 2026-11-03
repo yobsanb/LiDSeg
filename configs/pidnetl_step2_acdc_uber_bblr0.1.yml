@@ -1,0 +1,66 @@
+# Step 2 - LiDSeg PIDNet-L on ACDC, Uber (all four conditions), from the step-1 dense-fog
+# checkpoint. ACDC has no clear pairs, so the reconstruction decoder is dropped and only the
+# segmentation loss trains; the guidance encoder + LGF stay in the deployed model.
+# Learning rate: the backbone (incl. PIDNet heads, 37.3M of 39.6M parameters) trains at 0.1x
+# (4e-5), guidance and LGF at 4e-4. The BiSeNetV2 paper setting (4e-4 on everything) erased
+# the step-1 model within two epochs (val 44.7 -> 32.5); 1e-4 on everything learned slower
+# (59.7 vs 65.9 at epoch 5). Result: val 74.49 single-scale, 76.62 with TTA (step 3).
+# DDP split: 2 GPUs x batch 8 x accum 1 = 16 per step (reference 1 GPU x 8 x accum 2);
+# warmup 250 optimizer steps (reference 500 micro-batches / accum 2).
+exp_name: lidseg_pidnetl_step2_acdc_uber_bblr0.1
+seed: 42
+backbone: pidnetl
+n_classes: 19
+ignore_index: 255
+
+guidance: true
+use_decoder: false
+guidance_depths: [4, 6, 6]
+
+cityscapes_root: null
+acdc_root: null                # from configs/paths.env
+crop_h: 512
+crop_w: 1024
+batch_size: 8                  # per GPU
+validation_full_res: true      # native 1080x1920
+val_batch_size: 1
+num_workers: 4
+replay_batch_size: 4
+replay_ratio_semantics: total_sample_fraction
+pretrain_path: null            # set by scripts/step2_acdc.sh to the step-1 best.pth
+
+# AdamW.
+base_lr: 4.0e-4
+weight_decay: 1.0e-4
+backbone_lr_mult: 0.1            # backbone (incl. PIDNet heads) 4e-5; guidance/LGF 4e-4
+guidance_lr_mult: 1.0
+fusion_lr_mult: 1.0
+grad_clip: 1.0
+grad_accum: 1
+amp: true
+sched: cosine
+warmup_iters: 250
+min_lr_ratio: 0.01
+
+loss_weighting: uncertainty
+lambda_segmentation: 1.0
+lambda_reconstruction: 0.0
+lambda_lovasz: 0.5
+lambda_aux: 0.4
+use_ohem: false
+
+log_every: 25
+val_every: 1
+grad_log_every: 50
+tensorboard: true
+ddp_find_unused: true
+early_stop_patience: 20
+
+stages:
+  - name: "ACDC Uber"
+    dataset: acdc
+    conditions: [fog, night, rain, snow]
+    epochs: 100
+    lr_multiplier: 1.0
+    replay_ratio: 0.0
+    init: full_ckpt

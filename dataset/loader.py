@@ -30,6 +30,10 @@ class _EvalSampleIndex(int):
         obj.is_padding = bool(is_padding)
         return obj
 
+    def __getnewargs_ex__(self):
+        # DataLoader workers receive indices by pickle; carry the keyword-only flag.
+        return (int(self),), {"is_padding": self.is_padding}
+
 
 class PaddedDistributedEvalSampler(Sampler[int]):
     """Distributed validation sampler that marks its padding rows."""
@@ -67,11 +71,20 @@ class PaddedDistributedEvalSampler(Sampler[int]):
 
 
 class EpochRandomSampler(Sampler[int]):
-    """A replay sampler whose order is a pure function of seed and epoch."""
+    """A replay sampler whose order is a pure function of seed and epoch.
 
-    def __init__(self, dataset: Dataset, *, seed: int):
+    Under DDP every rank draws the same permutation and keeps its own strided
+    shard, so ranks replay disjoint rows as with ``DistributedSampler``.
+    """
+
+    def __init__(self, dataset: Dataset, *, seed: int,
+                 num_replicas: int = 1, rank: int = 0):
+        if not 0 <= rank < num_replicas:
+            raise ValueError(f"rank must be in [0, {num_replicas}), got {rank}")
         self.dataset = dataset
         self.seed = int(seed)
+        self.num_replicas = int(num_replicas)
+        self.rank = int(rank)
         self.epoch = 0
 
     def set_epoch(self, epoch: int) -> None:
@@ -82,10 +95,11 @@ class EpochRandomSampler(Sampler[int]):
     def __iter__(self) -> Iterator[int]:
         generator = torch.Generator()
         generator.manual_seed(self.seed + self.epoch)
-        return iter(torch.randperm(len(self.dataset), generator=generator).tolist())
+        order = torch.randperm(len(self.dataset), generator=generator).tolist()
+        return iter(order[self.rank::self.num_replicas])
 
     def __len__(self) -> int:
-        return len(self.dataset)
+        return len(range(self.rank, len(self.dataset), self.num_replicas))
 
 
 def _seed_epoch_worker(worker_id: int) -> None:
@@ -329,8 +343,14 @@ def build_replay_loader(
     collate_fn,
     shuffle: bool = True,
     seed: int = 0,
+    num_replicas: int = 1,
+    rank: int = 0,
 ) -> Optional[DataLoader]:
-    """Concatenate replay subsets from prior stages into a DataLoader."""
+    """Concatenate replay subsets from prior stages into a DataLoader.
+
+    With ``num_replicas > 1`` each rank replays its own shard of one shared
+    epoch permutation, so together the ranks sample like a single process.
+    """
     if not replay_datasets:
         return None
     if len(replay_datasets) == 1:
@@ -341,14 +361,17 @@ def build_replay_loader(
         raise ValueError("cannot build a replay loader from an empty dataset")
     if batch_size < 1:
         raise ValueError(f"replay batch_size must be >= 1, got {batch_size}")
-    if len(ds) < batch_size:
-        raise ValueError(
-            "replay subset is smaller than replay_batch_size while drop_last=True; "
-            "it would yield no replay batches")
     replay_seed = int(seed)
+    sampler = (EpochRandomSampler(ds, seed=replay_seed, num_replicas=num_replicas,
+                                  rank=rank) if shuffle else None)
+    if (len(sampler) if sampler is not None else len(ds)) < batch_size:
+        raise ValueError(
+            "replay subset (per rank) is smaller than replay_batch_size while "
+            "drop_last=True; it would yield no replay batches")
+    # Augmentation RNG differs per rank; the sampler permutation above does not.
+    augment_seed = replay_seed + 100_000 * int(rank)
     generator = torch.Generator()
-    generator.manual_seed(replay_seed)
-    sampler = EpochRandomSampler(ds, seed=replay_seed) if shuffle else None
+    generator.manual_seed(augment_seed)
     loader = DataLoader(
         ds, batch_size=batch_size, shuffle=False, sampler=sampler,
         num_workers=num_workers, pin_memory=True, drop_last=True,
@@ -359,7 +382,7 @@ def build_replay_loader(
         generator=generator,
     )
     # TrainingEngine sets these before each epoch.
-    loader._lidseg_replay_seed = replay_seed
+    loader._lidseg_replay_seed = augment_seed
     return loader
 
 

@@ -52,6 +52,11 @@ def validate(model, val_loader, n_classes: int, device) -> Dict[str, float]:
         }
         local_images = 0
         ddp = is_ddp()
+        if ddp:
+            # BatchNorm running stats are rank-local between DDP forwards; score
+            # exactly the rank-0 model that the checkpoint stores.
+            for buf in _unwrap(model).buffers():
+                dist.broadcast(buf, src=0)
 
         for batch in val_loader:
             img = batch["image"].to(device, non_blocking=True)

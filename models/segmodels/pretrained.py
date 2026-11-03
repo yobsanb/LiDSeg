@@ -1,4 +1,4 @@
-"""Registry of pretrained backbone checkpoints resolved under ``pretrained/legacy/``."""
+"""Registry of pretrained backbone checkpoints resolved under ``pretrained/``."""
 
 from __future__ import annotations
 
@@ -7,20 +7,16 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_PRETRAIN_DIR = _REPO_ROOT / "pretrained" / "legacy"
+_PRETRAIN_DIR = _REPO_ROOT / "pretrained"
 
 
 BACKBONE_PRETRAINED: dict[str, Tuple[str, str, Optional[str]]] = {
-    "bisenetv2":      ("bisenet_v2_cityscapes.pth",        "cityscapes",         None),
-    "sctnets":        ("sctnet_s_seg75_cityscapes.pth",    "cityscapes",         None),
-    "ddrnet":         ("DDRNet_23_slim_cityscapes.pth",    "cityscapes",         None),
-    "stdc":           ("STDC1-Seg_model_maxmIOU75.pth",    "cityscapes",         None),
-    "pidnets":        ("PIDNet_S_Cityscapes_mmseg.pth",    "cityscapes",         None),
+    "pidnetl": ("PIDNet_L_Cityscapes_mmseg.pth", "cityscapes", None),
 }
 
-# Digests for automatically downloaded artifacts; keep in sync with tools/fetch_pretrained.py.
+# Weights-only file written by tools/prepare_pidnetl_weights.py; keep in sync with it.
 BACKBONE_PRETRAINED_SHA256: dict[str, str] = {
-    "pidnets": "bb8e3bccdda7aa8e35362422363ce2190c68a09b46d0df261d438e7516adaf5c",
+    "pidnetl": "56f23bc4c2ba3bf87f647bbadd8e8e6f924ef1f68d6b6f4cbbd0085b38bf0836",
 }
 
 
@@ -44,22 +40,15 @@ def _verify_pinned_artifact(backbone: str, path: Path) -> None:
     if actual != expected:
         raise RuntimeError(
             f"Refusing {path}: SHA-256 mismatch for {backbone}; expected "
-            f"{expected}, got {actual}. Re-fetch it with "
-            "'python tools/fetch_pretrained.py --only pidnets --force'."
+            f"{expected}, got {actual}. Recreate it with "
+            "'python tools/prepare_pidnetl_weights.py'."
         )
 
 
 def resolve_pretrained(backbone_name: str) -> Optional[str]:
     """Absolute path of a backbone's checkpoint, or None."""
-    info = BACKBONE_PRETRAINED.get(_normalise(backbone_name))
-    if info is None:
-        return None
-    rel = info[0]
-    p = _PRETRAIN_DIR / rel
-    if not p.is_file():
-        return None
-    _verify_pinned_artifact(_normalise(backbone_name), p)
-    return str(p)
+    info = resolve_pretrained_full(backbone_name)
+    return None if info is None else info[0]
 
 
 def resolve_pretrained_full(backbone_name: str

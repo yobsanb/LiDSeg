@@ -4,8 +4,6 @@
 # under the Apache License 2.0. Copyright Bowen Cheng.
 # Modified for LiDSeg.
 
-import os
-
 import numpy as np
 from PIL import Image, ImageOps
 
@@ -79,7 +77,6 @@ class BaseDataset(data.Dataset):
             dataset_dict['raw_label'] = raw_label
         size = image.shape
         dataset_dict['raw_size'] = np.array(size)
-        name = os.path.splitext(os.path.basename(self.ann_list[index]))[0]
 
         if self.pre_augmentation_transform is not None:
             image, label = self.pre_augmentation_transform(image, label)

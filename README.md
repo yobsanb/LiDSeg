@@ -4,6 +4,12 @@
 
 BMVC 2026 · Yobsan Bayisa Leta, Christos Kyrkou, Maria K. Michael, Theocharis Theocharides · University of Cyprus
 
+**Official benchmark model:** this repository contains the official LiDSeg PIDNet-L model
+submitted to the [ACDC semantic segmentation benchmark](https://acdc.vision.ee.ethz.ch/submissions/6ac8c8bb3041fc0c1fd88257),
+task *all* (fog, night, rain, snow).
+The release includes the training, inference and submission code. Datasets, prediction archives
+and checkpoint binaries are excluded from the Git repository.
+
 ![LiDSeg architecture](docs/architecture.png)
 
 ## Overview
@@ -17,163 +23,158 @@ LiDSeg improves semantic segmentation under adverse weather using a lightweight 
 - **LGF** (`models/lgf.py`): channel-wise gated fusion at s8/s16/s32 with learnable per-stage scaling.
 - **Losses** (`models/loss.py`): cross-entropy, Lovász-Softmax, auxiliary segmentation loss, Charbonnier reconstruction loss, and uncertainty weighting.
 - **Wrapper** (`models/lidseg.py`): connects the backbone, guidance branch, and LGF. Set `guidance=False` for the unguided baseline.
+- **Backbone** (`models/segmodels/pidnet.py`): PIDNet-L (37.31M), initialised from the official OpenMMLab Cityscapes weights.
+
+This tree is rebuilt for **LiDSeg PIDNet-L** and runs in three steps: the Foggy Cityscapes fog
+curriculum, ACDC fine-tuning, and the ACDC test-server submission. Other backbones will follow the
+same curriculum and guidance; the previous multi-backbone code is in the git history.
 
 ## Installation
 
 ```bash
-conda create -n lidseg python=3.10 -y
+conda create -n lidseg python=3.12 -y
 conda activate lidseg
 pip install -r requirements.txt
+cp configs/paths.env.example configs/paths.env   # then set the dataset roots
+python tools/prepare_pidnetl_weights.py          # -> pretrained/PIDNet_L_Cityscapes_mmseg.pth
 ```
 
-For a different CUDA runtime, install the matching PyTorch build from [pytorch.org](https://pytorch.org/get-started/locally/) first.
+`prepare_pidnetl_weights.py` downloads the official OpenMMLab PIDNet-L Cityscapes checkpoint
+(`...-0783ca6b.pth`, SHA-256 checked) and writes a weights-only copy. The mmseg file also pickles
+mmengine log objects, which the trainer's safe `weights_only` loader rejects; the tool extracts the
+tensors with a restricted unpickler so nothing from the download executes. The trainer then verifies
+the output's pinned SHA-256 (`56f23bc4...`) before every run.
 
 ## Datasets
 
-Datasets are not redistributed. Obtain them from the official sources.
-
-| Dataset | Use | Source |
+| Dataset | Use | Expected layout |
 |---|---|---|
-| Cityscapes + Foggy Cityscapes | Paired pretraining | [Cityscapes](https://www.cityscapes-dataset.com/) |
-| ACDC | Fine-tuning and evaluation | [ACDC](https://acdc.vision.ee.ethz.ch/) |
-| Foggy Zurich v2 | Zero-shot evaluation | [Foggy Zurich v2](https://people.ee.ethz.ch/~csakarid/Model_adaptation_SFSU_dense/) |
-| Foggy Driving | Zero-shot evaluation | [Foggy Driving](https://people.ee.ethz.ch/~csakarid/SFSU_synthetic/) |
+| Cityscapes + Foggy Cityscapes | Step 1 | `$CITYSCAPES_ROOT/{foggy_0.00,Foggy_0.005,Foggy_0.01,Foggy_0.02}/leftImg8bit/{train,val}`, `gtFine/{train,val}` (`*_labelTrainIds.png`); clear images under `$CITYSCAPES_CLEAR_ROOT/leftImg8bit` |
+| ACDC | Steps 2-3 | `$ACDC_ROOT/rgb_anon/<condition>/{train,val,test,train_ref,val_ref}`, `gt/<condition>/{train,val}` (`*_gt_labelTrainIds.png`) |
 
-Labels must use Cityscapes `trainIds` (19 classes, `255` ignore). For ACDC conversion when needed:
+Labels use Cityscapes `trainIds` (19 classes, `255` ignore). Obtain the datasets separately and
+set their local roots in the ignored `configs/paths.env`. The `dataset/` directory in this
+repository contains Python loaders and transforms.
 
-```bash
-python tools/utils/convert_acdc_labels.py --input /path/to/ACDC
-```
-
-Configure paths once:
+## Step 1: Foggy Cityscapes
 
 ```bash
-cp configs/paths.env.example configs/paths.env
-# edit configs/paths.env
+scripts/step1_foggy_cityscapes.sh            # GPUS=0,1,2,3 by default (exactly 4)
 ```
 
-Expected roots:
+Config `configs/pidnetl_step1_foggy_cityscapes.yml`: stage 0 validates the pretrained model on clear
+Cityscapes, then three training stages at fog density beta = 0.005 / 0.01 / 0.02 (200 / 100 / 100
+epochs max, early-stop patience 10, LR x1.0 / 0.6 / 0.5) with 10 / 30 / 30 % replay of earlier fog
+levels. Reconstruction is on: the decoder reconstructs the paired clear image (Charbonnier), with
+uncertainty-weighted CE + 0.5 Lovasz + 0.4 aux segmentation loss. AdamW, base LR 1e-3, backbone at
+0.01x, cosine schedule, AMP, 24 images per step (4 GPUs x 6). Validation is full resolution
+(1024x2048) every epoch.
 
-```text
-$CITYSCAPES_ROOT/
-  leftImg8bit/{train,val}/...
-  gtFine/{train,val}/...
-  foggy_0.00/leftImg8bit/...
-  Foggy_{0.005,0.01,0.02}/leftImg8bit/...
+Output: `output/cityscapes/pidnetl_guided/` with `best_stage_N.pth` / `last_stage_N.pth` per stage,
+`best.pth` = the dense-fog stage's best, `trainf.log`, and `eval_cs_foggy.json` (final and per-stage
+checkpoints scored at clear and every fog density). Re-running the script resumes an interrupted
+stage exactly; do not edit tracked source while a run is live.
 
-$ACDC_ROOT/
-  rgb_anon/<condition>/{train,val,test}/...
-  gt/<condition>/{train,val}/...
-```
-
-## Pretrained Backbones
-
-Inspect available checkpoints:
+## Step 2: ACDC
 
 ```bash
-python tools/fetch_pretrained.py --list
+scripts/step2_acdc.sh                        # needs step 1 finished; GPUS=0,1 by default (exactly 2)
 ```
+
+Config `configs/pidnetl_step2_acdc_uber_bblr0.1.yml`: fine-tunes the step-1 `best.pth` on all four
+ACDC conditions (Uber). ACDC has no clear pairs, so the reconstruction decoder is dropped and only
+the segmentation loss trains; the guidance encoder and LGF remain in the deployed model. AdamW, base
+LR 4e-4 for guidance and LGF, **backbone at 0.1x (4e-5)**, 16 images per step (2 GPUs x 8), up to 100
+epochs with patience 20, native-resolution (1080x1920) validation.
+
+The backbone rate departs from the BiSeNetV2 paper setting (4e-4 on the whole network). On PIDNet-L,
+whose backbone and heads hold 37.3M of the 39.6M parameters, that setting erased the step-1 model
+within two epochs (val 44.7 -> 32.5, below the 34.0 the step-1 model scores on ACDC untrained).
+
+Output: `output/acdc/pidnetl_norecon_uber_bblr0.1/` and `eval_acdc.json`, a single-checkpoint
+per-condition val report. (`norecon` because the decoder is dropped on ACDC; `bblr0.1` names the
+backbone rate. `evaluation/eval_acdc.py` reads `<backbone>_<variant>_<suffix>[_<tag>]`.)
+
+## Step 3: ACDC test-server submission
 
 ```bash
-NGPUS=4 scripts/train_cityscapes.sh bisenetv2 clear
+scripts/step3_acdc_submission.sh             # needs step 2 finished; GPUS=0,1 by default
 ```
 
-This writes `output/pretrain/bisenetv2/`, whose `best.pth` is a valid `PRETRAIN_FROM` for Stage 1.
+Predicts the 2000 ACDC test images with test-time augmentation (softmax averaged over scales
+0.5 / 0.75 / 1 / 1.25 / 1.5 / 1.75 and horizontal flip, native resolution; `tools/acdc_tta.py`) and
+writes to `output/acdc_submission/`:
 
-## Training
+- `lidseg_pidnetl_uber_tta_val_tta.json`: val score of exactly this inference setting;
+- `lidseg_pidnetl_uber_tta.zip`: `labelTrainIds/<condition>/<sequence>/<frame>_labelTrainIds.png`,
+  checked against the [submission rules](https://acdc.vision.ee.ethz.ch/submit) (one 1920x1080
+  trainId PNG per test image, names start with the frame name, zip under 200 MB);
+- `lidseg_pidnetl_uber_tta_model.pth`: weights-only model for the form's required *Model File*.
 
-### Stage 1: Foggy Cityscapes
+The official submitted model is the step-2 PIDNet-L checkpoint with guidance and LGF active,
+without the reconstruction decoder, using the TTA setting above. The submitted weights-only
+export has SHA-256 `62b6fc6c75f66884efb9cc01391ab21016018622def1c8598132bcd355d2c1c7`.
 
-Paired clear/foggy training with the progressive fog curriculum `0.005 -> 0.01 -> 0.02`:
+Submission form: Challenge *Semantic Segmentation*, Task *all*, Data used for training: *Labels* and
+*External Data* (Cityscapes, Foggy Cityscapes, OpenMMLab Cityscapes-pretrained PIDNet-L); the ACDC
+normal-condition images are not used. The server accepts one submission per 48 h, six per 30 days.
+
+## Hand-off bundle for fault injection
 
 ```bash
-NGPUS=4 scripts/train_cityscapes.sh <backbone> [guided|baseline|norecon|clear]
+GPU=0 scripts/make_fault_injection_bundle.sh   # needs step 2 finished
 ```
 
-```bash
-NGPUS=4 scripts/train_cityscapes.sh bisenetv2            # guided, the full method
-NGPUS=4 scripts/train_cityscapes.sh ddrnet baseline      # no guidance
-NGPUS=4 scripts/train_cityscapes.sh stdc norecon         # guidance without L_rec
-```
+Builds a self-contained folder for collaborators who only run inference,
+`output/handoff/lidseg_pidnetl_acdc/` (and a `.tar.gz` of it): the step-2 weights as one file, the
+inference model code, the ACDC val split (images and trainId labels), `deploy/` (README for the
+recipient, `run_eval.sh`, `setup_env.sh`, loader and evaluation), the golden-run report and a
+per-module layer table. The build ends by running `bash run_eval.sh` inside the folder, which must
+print PASS. The folder contains ACDC images: check the ACDC license before sending it to anyone.
 
-Output goes to `output/cityscapes/<backbone>_<variant>`. The final dense-fog checkpoint is `best_stage_4.pth`, also published as `best.pth`.
+## Notes on this rebuild
 
-### Stage 2: ACDC
+Fixed while preparing PIDNet-L (the original release had only been run on one GPU):
 
-The reconstruction decoder and reconstruction loss are removed. Fine-tuning uses segmentation labels only.
+- DDP validation crashed: the padded eval-sampler index could not be unpickled in loader workers.
+- DDP checkpointing crashed: gathering per-rank RNG state through `all_gather_object` failed on PyTorch 2.9.
+- AMP: an fp16 gradient overflow raised in `clip_grad_norm_` instead of letting GradScaler skip the
+  step, so any long run eventually crashed (single GPU too). Overflowed steps are now skipped; 20
+  consecutive skips still fail loudly.
+- DDP replicas diverged: the uncertainty-weighting parameters live in the criterion, outside DDP, so
+  their gradients (and the shared clip norm) differed per rank. They are now averaged across ranks.
+- DDP replay had shuffling off, so every rank replayed the same few clear images. Each rank now takes
+  a disjoint shard of one shared per-epoch permutation.
+- DDP validation mixed models: BatchNorm running statistics are rank-local, so ranks scored slightly
+  different networks. Validation now broadcasts rank 0's buffers first; trainer val equals
+  `eval_acdc.py` exactly.
+- Inference leaked GPU memory: the backbone-output walk in `models/lidseg.py` was a recursive closure,
+  a reference cycle that kept every call's logits alive until Python's cyclic GC ran (152 MB per
+  1080x1920 prediction). Long evaluation loops ran out of memory; the walk is now iterative.
 
-```bash
-NGPUS=4 scripts/train_acdc.sh <backbone> [uber|fog|night|rain|snow]
-```
-
-```bash
-CKPT=output/cityscapes/bisenetv2_guided/best_stage_4.pth
-PRETRAIN_FROM=$CKPT NGPUS=4 scripts/train_acdc.sh bisenetv2         # Uber, all conditions
-PRETRAIN_FROM=$CKPT NGPUS=4 scripts/train_acdc.sh bisenetv2 night   # condition Expert
-```
-
-Output goes to `output/acdc/<backbone>_norecon_<target>`.
-
-Supported backbones: `bisenetv2`, `ddrnet`, `stdc`, `pidnets`, `pidnetm`, `pidnetl`, `sctnets`, `sctnetb`.
-
-### Configs
-
-Three configs cover every run. `--variant` sets `guidance`/`use_decoder`/`lambda_reconstruction`; `--conditions` sets the ACDC conditions.
-
-| Config | Used by |
-|---|---|
-| `configs/cityscapes_foggy.yml` | Stage 1, all three variants |
-| `configs/cityscapes_clear.yml` | clear-Cityscapes backbone pretraining |
-| `configs/acdc.yml` | Stage 2, Uber and per-condition Experts |
-
-Custom runs:
-
-```bash
-scripts/train.sh <config> <output_dir> [backbone] [n_gpus] [extra args]
-```
-
-## Evaluation
-
-```bash
-# Foggy Cityscapes
-python evaluation/eval_cs_foggy.py   --exp_dir output/cityscapes/bisenetv2_guided
-
-# ACDC
-python evaluation/eval_acdc.py   --exp_dir output/acdc/bisenetv2_norecon_uber --split val
-
-# Zero-shot
-scripts/eval_zeroshot.sh output/acdc/bisenetv2_norecon_uber/best.pth bisenetv2 foggy_zurich
-scripts/eval_zeroshot.sh output/acdc/bisenetv2_norecon_uber/best.pth bisenetv2 foggy_driving
-```
+Clean PIDNet-L on Cityscapes val scores 79.88 in this pipeline (PIDNet-S: 77.70), about 1.0 below
+the published mmseg numbers for both; the offset is pipeline-wide (not the port, not the labels), so
+compare guided and unguided numbers within this pipeline.
 
 ## Results
 
-### Foggy Cityscapes
+Official benchmark submission: [ACDC benchmark board](https://acdc.vision.ee.ethz.ch/submissions/6ac8c8bb3041fc0c1fd88257).
 
-Validation mIoU (%).
+Single checkpoint, full-resolution val, mIoU (%). These are validation results; the validation
+split was used for checkpoint selection. They are not official benchmark test scores.
 
-| Model | Clear | Light | Medium | Dense | Drop |
+Step 1, Foggy Cityscapes (`best.pth` = dense-fog stage best; untrained PIDNet-L: dense 70.34):
+
+| clear | beta 0.005 | beta 0.01 | beta 0.02 |
+|---:|---:|---:|---:|
+| 80.35 | 80.40 | 80.17 | 78.84 |
+
+Step 2, ACDC val (406 images), and step 3's test-time augmentation on the same checkpoint:
+
+| inference | fog | night | rain | snow | all (pooled) |
 |---|---:|---:|---:|---:|---:|
-| BiSeNetV2 | 69.1 | 60.9 | 58.8 | 54.2 | -14.9 |
-| DDRNet-23s | 77.8 | 66.1 | 62.2 | 56.1 | -21.7 |
-| STDC1-Seg | 71.8 | 67.5 | 62.5 | 56.1 | -15.7 |
-| FreD-ViT (Swin-B) | 82.8 | 79.5 | 78.0 | 74.8 | -8.0 |
-| **LiDSeg (BiSeNetV2)** | 76.7 | 76.3 | 75.7 | **74.2** | **-2.5** |
-| **LiDSeg (DDRNet-23s)** | 76.9 | 76.2 | 75.6 | **74.1** | **-2.8** |
-| **LiDSeg (STDC1-Seg)** | 76.9 | 76.2 | 75.5 | **74.3** | **-2.6** |
-| **LiDSeg (PIDNet-L)** | 76.8 | 76.2 | 75.5 | **74.2** | **-2.6** |
-
-### ACDC
-
-Test mIoU (%).
-
-| Model | Protocol | Fog | Night | Rain | Snow | Pooled All |
-|---|---|---:|---:|---:|---:|---:|
-| DeepLabV3+ | Supervised | 69.1 | 60.9 | 74.1 | 69.6 | 70.0 |
-| HRNet-W48 | Supervised | 74.7 | 65.3 | 77.7 | 76.3 | 75.0 |
-| MIC | UDA | – | – | – | – | 70.4 |
-| WA2Net | UDA | – | – | – | – | 73.8 |
-| **LiDSeg (PIDNet-L)** | Sup. fine-tune | 73.99 | 64.58 | 78.58 | 77.18 | **75.07** |
+| single scale | 79.54 | 55.26 | 75.47 | 79.19 | 74.49 |
+| scales 0.5-1.75 + flip | 81.58 | 57.61 | 77.19 | 80.67 | 76.62 |
 
 ## Citation
 

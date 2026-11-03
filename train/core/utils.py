@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import inspect
 import json
 import logging
 import os
@@ -533,12 +532,28 @@ def capture_rng_state() -> dict:
     return payload
 
 
+def _map_rng_leaves(obj: Any, fn) -> Any:
+    """Apply ``fn`` to every tensor/array leaf of an RNG payload."""
+    if isinstance(obj, Mapping):
+        return {k: _map_rng_leaves(v, fn) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_map_rng_leaves(v, fn) for v in obj]
+    if torch.is_tensor(obj) or isinstance(obj, np.ndarray):
+        return fn(obj)
+    return obj
+
+
 def capture_rng_states_by_rank() -> dict:
     """Gather rank-local RNG states before rank zero atomically saves a checkpoint."""
     local = capture_rng_state()
     if dist.is_available() and dist.is_initialized():
-        states: list[Optional[dict]] = [None] * dist.get_world_size()
-        dist.all_gather_object(states, local)
+        # all_gather_object cannot unpickle tensor storages on this PyTorch, so the
+        # tensors travel as NumPy arrays and are restored to tensors afterwards.
+        wire = _map_rng_leaves(local, lambda t: t.detach().cpu().numpy())
+        gathered: list[Optional[dict]] = [None] * dist.get_world_size()
+        dist.all_gather_object(gathered, wire)
+        states = [_map_rng_leaves(s, lambda a: torch.from_numpy(np.array(a, copy=True)))
+                  for s in gathered]
     else:
         states = [local]
     return {"schema_version": 1, "by_rank": states}
@@ -668,7 +683,7 @@ def set_seed(seed: int, rank: int = 0, *, deterministic: bool = True) -> None:
     random.seed(value)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(value)
-    torch.use_deterministic_algorithms(bool(deterministic), warn_only=False)
+    torch.use_deterministic_algorithms(bool(deterministic), warn_only=True)
     if torch.backends.cudnn.is_available():
         torch.backends.cudnn.deterministic = bool(deterministic)
         torch.backends.cudnn.benchmark = not bool(deterministic)

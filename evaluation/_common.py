@@ -73,14 +73,24 @@ def normalize_backbone(name: str) -> str:
 def parse_exp_name(
     name: str, dataset: str
 ) -> Optional[Tuple[str, str, Optional[str]]]:
-    """Split an experiment dir name into (backbone, variant, acdc_suffix)."""
+    """Split an experiment dir name into (backbone, variant, acdc_suffix).
+
+    ACDC names may carry one trailing run tag without underscores, e.g.
+    ``pidnetl_norecon_uber_bblr0.1``; the tag is ignored.
+    """
     head = name
     suffix: Optional[str] = None
     if dataset == "acdc":
-        for s in ACDC_EXP_SUFFIXES:
-            if head.endswith("_" + s):
-                suffix = s
-                head = head[: -(len(s) + 1)]
+        candidates = [head]
+        if "_" in head:
+            candidates.append(head.rsplit("_", 1)[0])
+        for cand in candidates:
+            for s in ACDC_EXP_SUFFIXES:
+                if cand.endswith("_" + s):
+                    suffix = s
+                    head = cand[: -(len(s) + 1)]
+                    break
+            if suffix is not None:
                 break
         if suffix is None:
             return None

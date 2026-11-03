@@ -99,7 +99,6 @@ class Trainer:
 
     def _build_model(self):
         """Build the guided model, or the bare backbone when guidance is off."""
-        cfg = self.cfg
         architecture = self.architecture
         guidance = bool(architecture["guidance"])
         model = LiDSegModel(
@@ -273,7 +272,8 @@ class Trainer:
         return build_replay_loader(
             subsets, batch_size=cfg["replay_batch_size"],
             num_workers=max(1, cfg["num_workers"] // 2), collate_fn=collate,
-            shuffle=(self.world <= 1), seed=cfg["seed"])
+            shuffle=True, seed=cfg["seed"],
+            num_replicas=self.world, rank=self.rank)
 
     def _train_stage(self, stage_idx: int, stage: Dict) -> Dict[str, float]:
         cfg = self.cfg
@@ -312,8 +312,8 @@ class Trainer:
         replay_loader = (None if validate_only_stage
                          else self._build_replay_loader(stage))
         if replay_loader is not None and self.world > 1:
-            self.log.info("[replay] shuffle=OFF (world_size=%d — synchronized "
-                          "replay batches across ranks)", self.world)
+            self.log.info("[replay] world_size=%d: each rank replays a disjoint shard "
+                          "of one shared per-epoch permutation", self.world)
 
         model = self._build_model()
 

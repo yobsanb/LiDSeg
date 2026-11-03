@@ -14,6 +14,32 @@ configs/paths.env
 secrets/
 credentials/
 
+# Dataset files and generated predictions; keep dataset/ Python loaders
+data/
+datasets/
+ACDC/
+Cityscapes/
+cityscapes/
+Foggy_Cityscapes/
+Foggy_Driving/
+Foggy_Zurich/
+rgb_anon/
+gt/
+gtFine/
+leftImg8bit/
+labelTrainIds/
+predictions/
+*_rgb_anon.png
+*_gt_label*.png
+*_gtFine_*.png
+*_leftImg8bit*.png
+*_labelTrainIds.png
+*.zip
+*.tar
+*.tar.*
+*.tgz
+*.7z
+
 # Training artefacts
 output/
 OUTPUT/
@@ -34,7 +60,7 @@ mlruns/
 artifacts/
 checkpoints/
 
-# Pretrained third-party weights (fetched via tools/fetch_pretrained.py)
+# Pretrained third-party weights (tools/prepare_pidnetl_weights.py)
 pretrained/
 
 # Python

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import inspect
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import torch
 from torch import Tensor, nn
+import torch.nn.functional as F
 
 from models.dehazeformer import (DEHAZE_CHANNELS, LinearDehazeFormerEncoder,
                                  ReconstructionDecoder)
@@ -17,6 +18,7 @@ from models.segmodels.feature_registry import get_features
 __all__ = ["LiDSegModel", "build_lidseg"]
 
 _SCALES: Tuple[str, str, str] = ("s8", "s16", "s32")
+_STRIDE = 32
 
 
 def forward_accepts_kw(model: nn.Module, name: str) -> bool:
@@ -147,16 +149,16 @@ class LiDSegModel(nn.Module):
     @staticmethod
     def _split_outputs(raw, n_classes: int) -> Tuple[Tensor, List[Tensor]]:
         """Flatten a backbone return value into main logits and aux logits."""
+        # Iterative depth-first walk. A recursive closure would form a reference
+        # cycle that keeps every call's logits alive until the cyclic GC runs.
         bag: List[Tensor] = []
-
-        def walk(node):
+        stack = [raw]
+        while stack:
+            node = stack.pop()
             if torch.is_tensor(node):
                 bag.append(node)
             elif isinstance(node, (tuple, list)):
-                for item in node:
-                    walk(item)
-
-        walk(raw)
+                stack.extend(reversed(node))
         if not bag:
             raise RuntimeError("backbone returned no tensors")
         aux = [t for t in bag[1:] if t.dim() == 4 and t.shape[1] == n_classes]
@@ -175,9 +177,21 @@ class LiDSegModel(nn.Module):
         """Logits and aux logits, plus recon while training with a decoder."""
         del x_clear
 
+        h, w = x_adverse.shape[-2:]
+        pad_h = (-h) % _STRIDE
+        pad_w = (-w) % _STRIDE
+        if pad_h or pad_w:
+            x_adverse = F.pad(x_adverse, (0, pad_w, 0, pad_h), mode="replicate")
+
+        def _crop(tensor: Tensor) -> Tensor:
+            if (pad_h or pad_w) and tensor.dim() == 4:
+                return tensor[..., :h, :w]
+            return tensor
+
         if not self.guidance_enabled:
             logits, aux_logits = self._run_backbone(x_adverse)
-            return {"logits": logits, "aux_logits": aux_logits}
+            return {"logits": _crop(logits),
+                    "aux_logits": [_crop(a) for a in aux_logits]}
 
         guidance = self.guidance(x_adverse)
         self._guidance_buffer.clear()
@@ -187,9 +201,12 @@ class LiDSegModel(nn.Module):
         finally:
             self._guidance_buffer.clear()
 
-        out = {"logits": logits, "aux_logits": aux_logits, "g_adverse": guidance}
+        out = {"logits": _crop(logits),
+               "aux_logits": [_crop(a) for a in aux_logits],
+               "g_adverse": guidance}
         if (self.training or return_recon) and self.use_decoder:
-            out.update(self.decoder(guidance, x_adverse))
+            recon = self.decoder(guidance, x_adverse)
+            out.update({k: _crop(v) for k, v in recon.items()})
         return out
 
     @torch.no_grad()

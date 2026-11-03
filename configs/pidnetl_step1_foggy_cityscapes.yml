@@ -1,38 +1,44 @@
-exp_name: cityscapes_foggy
+# Step 1 - LiDSeg PIDNet-L on Foggy Cityscapes (fog curriculum, reconstruction ON).
+# Paper protocol; the only run-specific choice is the DDP split: 4 GPUs x batch 6 x accum 1
+# = 24 images per optimizer step, the same as the reference 1 GPU x 6 x accum 4. Warmup is
+# expressed in optimizer steps (125 = the reference 500 micro-batches / accum 4).
+exp_name: lidseg_pidnetl_step1_foggy_cityscapes
 seed: 42
-backbone: bisenetv2
+backbone: pidnetl
 n_classes: 19
 ignore_index: 255
 
+# Guidance encoder (1.85M) + LGF at s8/s16/s32 + training-only reconstruction decoder.
 guidance: true
 use_decoder: true
 guidance_depths: [4, 6, 6]
 
-cityscapes_root: null
+cityscapes_root: null          # from configs/paths.env
 acdc_root: null
 crop_h: 512
 crop_w: 1024
-batch_size: 6
-validation_full_res: true
+batch_size: 6                  # per GPU
+validation_full_res: true      # 1024x2048
 val_batch_size: 1
 num_workers: 4
 replay_batch_size: 3
 replay_ratio_semantics: total_sample_fraction
-pretrain_path: null
+pretrain_path: null            # resolves to pretrained/PIDNet_L_Cityscapes_mmseg.pth (sha-pinned)
 
-opt: adamw
+# AdamW. The pretrained backbone is protected at 0.01x LR during the curriculum.
 base_lr: 1.0e-3
 weight_decay: 1.0e-4
 backbone_lr_mult: 0.01
 guidance_lr_mult: 1.0
 fusion_lr_mult: 1.0
 grad_clip: 1.0
-grad_accum: 4
+grad_accum: 1
 amp: true
 sched: cosine
-warmup_iters: 500
+warmup_iters: 125
 min_lr_ratio: 0.01
 
+# CE + 0.5 Lovasz + 0.4 aux (seg) and Charbonnier (recon), uncertainty-weighted.
 loss_weighting: uncertainty
 lambda_segmentation: 1.0
 lambda_reconstruction: 1.0
@@ -40,11 +46,11 @@ lambda_lovasz: 0.5
 lambda_aux: 0.4
 use_ohem: false
 
-log_every: 50
+log_every: 25
 val_every: 1
-grad_log_every: 200
+grad_log_every: 50
 tensorboard: true
-ddp_find_unused: true
+ddp_find_unused: true          # PIDNet's boundary head (d_head) is unused by this loss
 early_stop_patience: 10
 
 stages:
@@ -61,7 +67,6 @@ stages:
     beta: "0.005"
     epochs: 200
     lr_multiplier: 1.0
-    dual_stream: true
     replay_ratio: 0.10
     replay_from: ["clear"]
     init: prev_stage
@@ -70,7 +75,6 @@ stages:
     beta: "0.01"
     epochs: 100
     lr_multiplier: 0.6
-    dual_stream: true
     replay_ratio: 0.30
     replay_from: ["clear", "0.005"]
     init: prev_stage
@@ -79,7 +83,6 @@ stages:
     beta: "0.02"
     epochs: 100
     lr_multiplier: 0.5
-    dual_stream: true
     replay_ratio: 0.30
     replay_from: ["clear", "0.005", "0.01"]
     init: prev_stage

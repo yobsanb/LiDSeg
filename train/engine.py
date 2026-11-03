@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
@@ -70,6 +71,7 @@ class TrainingEngine:
         self.scaler = GradScaler("cuda", enabled=cfg["amp"], init_scale=2 ** 12)
         self._iter = 0
         self._accum_count = 0
+        self._amp_skip_streak = 0
 
     def _reset_replay_epoch(self, epoch: int) -> None:
         """Restart the replay iterator at an epoch boundary."""
@@ -440,6 +442,13 @@ class TrainingEngine:
                 log_d["recon_ssim"] = rs
 
         if should_step:
+            # The criterion's uncertainty weights sit outside DDP; average their grads
+            # like DDP does for the model, or ranks clip and step differently and drift.
+            if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
+                for param in self.criterion.parameters():
+                    if param.grad is None:
+                        param.grad = torch.zeros_like(param)
+                    dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
             self.scaler.unscale_(self.optim)
             # The short final group was already divided by grad_accum.
             if self._accum_count != grad_accum:
@@ -453,17 +462,24 @@ class TrainingEngine:
                 log_d.update(self._compute_component_grad_norms())
             cap = float(self.cfg.get("grad_clip", 0.0))
             all_params = list(self.model.parameters()) + list(self.criterion.parameters())
-            if cap > 0:
-                gn = torch.nn.utils.clip_grad_norm_(
-                    all_params, cap,
-                    error_if_nonfinite=True)
-            else:
-                gn = torch.nn.utils.clip_grad_norm_(
-                    all_params, float("inf"),
-                    error_if_nonfinite=True)
+            # Under AMP an fp16 overflow is routine: unscale_ records it and
+            # scaler.step skips the update, so only non-AMP runs fail here.
+            amp_on = self.scaler.is_enabled()
+            gn = torch.nn.utils.clip_grad_norm_(
+                all_params, cap if cap > 0 else float("inf"),
+                error_if_nonfinite=not amp_on)
             log_d["grad_norm"] = float(gn)
+            scale_before = self.scaler.get_scale() if amp_on else None
             self.scaler.step(self.optim)
             self.scaler.update()
+            if amp_on:
+                skipped = self.scaler.get_scale() < scale_before
+                self._amp_skip_streak = self._amp_skip_streak + 1 if skipped else 0
+                log_d["amp/skipped_step"] = float(skipped)
+                if self._amp_skip_streak >= 20:
+                    raise FloatingPointError(
+                        f"20 consecutive AMP overflow skips at iteration {self._iter} "
+                        f"(scale={self.scaler.get_scale():.3g}); training has diverged")
             self._accum_count = 0
         return log_d
 
