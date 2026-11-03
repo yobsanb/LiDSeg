@@ -133,7 +133,7 @@ Test per-class IoU (%), all conditions, from the [official ACDC leaderboard](htt
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | **LiDSeg (PIDNet-L)** | 94.87 | 79.81 | 90.05 | 53.82 | 53.09 | 65.43 | 80.13 | 76.47 | 89.37 | 66.01 | 96.35 | 75.44 | 53.88 | 90.66 | 66.93 | 79.13 | 89.01 | 53.69 | 65.70 | **74.73** |
 
-###Qualitative Result (ACDC)
+### Qualitative Result (ACDC)
 
 ![LiDSeg architecture](docs/acdc_recon_val.png)
 
