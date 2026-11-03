@@ -129,7 +129,7 @@ Validation mIoU (%).
 
 Test per-class IoU (%), all conditions, from the [official ACDC leaderboard](https://acdc.vision.ee.ethz.ch/submissions/6ac8c8bb3041fc0c1fd88257).
 
-| Model | Road | Sidew. | Build. | Wall | Fence | Pole | Light | Sign | Veg. | Terrain | Sky | Person | Rider | Car | Truck | Bus | Train | Motor. | Bike | **mIoU** |
+| Model | Road | Side walk | Building | Wall | Fence | Pole | Light | Sign | Vegetables | Terrain | Sky | Person | Rider | Car | Truck | Bus | Train | Motor cycle | Bike | **mIoU** |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | **LiDSeg (PIDNet-L)** | 94.87 | 79.81 | 90.05 | 53.82 | 53.09 | 65.43 | 80.13 | 76.47 | 89.37 | 66.01 | 96.35 | 75.44 | 53.88 | 90.66 | 66.93 | 79.13 | 89.01 | 53.69 | 65.70 | **74.73** |
 
@@ -156,4 +156,4 @@ Datasets are not redistributed and remain subject to their own licenses.
 
 This work has received funding from the European Union's Horizon Europe research and innovation programme under the Marie Skłodowska-Curie grant agreement No. 101169378 (TIRAMISU Doctoral Network), by the European Union's Horizon 2020 research and innovation programme under grant agreement No. 739551 (KIOS CoE), and from the Government of the Republic of Cyprus through the Cyprus Deputy Ministry of Research, Innovation and Digital Policy.
 
-LiDSeg builds on [BiSeNetV2](https://github.com/CoinCheung/BiSeNet), [DDRNet-23s](https://github.com/ydhongHIT/DDRNet), [STDC1-Seg](https://github.com/MichaelFan01/STDC-Seg), [PIDNet-L](https://github.com/XuJiacong/PIDNet), [TopFormer-B](https://github.com/hustvl/Topformer), and [SeaFormer-B](https://github.com/fudan-zvg/SeaFormer). The implementation utilized [MMSegmentation](https://github.com/open-mmlab/mmsegmentation), [Panoptic-DeepLab](https://github.com/bowenc0221/panoptic-deeplab), [LovaszSoftmax](https://github.com/bermanmaxim/LovaszSoftmax), [DehazeFormer](https://github.com/IDKiro/DehazeFormer), [Restormer](https://github.com/swz30/Restormer), and [cityscapesScripts](https://github.com/mcordts/cityscapesScripts).
+LiDSeg builds on [BiSeNetV2](https://github.com/CoinCheung/BiSeNet), [DDRNet-23s](https://github.com/ydhongHIT/DDRNet), [STDC1-Seg](https://github.com/MichaelFan01/STDC-Seg), [PIDNet-L](https://github.com/XuJiacong/PIDNet), [TopFormer-B](https://github.com/hustvl/Topformer), and [SeaFormer-B](https://github.com/fudan-zvg/SeaFormer). The implementation also utilized [MMSegmentation](https://github.com/open-mmlab/mmsegmentation), [Panoptic-DeepLab](https://github.com/bowenc0221/panoptic-deeplab), [LovaszSoftmax](https://github.com/bermanmaxim/LovaszSoftmax), [DehazeFormer](https://github.com/IDKiro/DehazeFormer), [Restormer](https://github.com/swz30/Restormer), and [cityscapesScripts](https://github.com/mcordts/cityscapesScripts).
