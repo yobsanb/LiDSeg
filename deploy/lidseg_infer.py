@@ -1,14 +1,14 @@
 """Load the LiDSeg PIDNet-L model from its weights file and prepare its input (inference only).
 
-    from lidseg_infer import load_model, load_image
-    model = load_model("lidseg_pidnetl_acdc.pth", device="cuda")
-    x = load_image("data/ACDC/rgb_anon/fog/val/GOPR0476/GOPR0476_frame_000761_rgb_anon.png")
+    from deploy.lidseg_infer import load_model, load_image
+    model = load_model("pretrained/lidseg_pidnetl_uber_tta_model.pth", device="cuda")
+    x = load_image("image.png")
     logits = model.predict(x.to("cuda"))  # [1, 19, 1080, 1920]
     pred = logits.argmax(1)               # Cityscapes trainIds 0..18
 
 Run as a script it prints the parameter breakdown and writes the per-module layer table:
 
-    python lidseg_infer.py --layers layers.csv
+    python deploy/lidseg_infer.py --layers layers.csv
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ import torch
 from PIL import Image
 
 HERE = Path(__file__).resolve().parent
-# In the hand-off bundle models/ sits next to this file; in LiDSeg-Release it is one level up.
+# Resolve the model package in source or exported layouts.
 sys.path.insert(0, str(HERE if (HERE / "models").is_dir() else HERE.parent))
 
 from models.lidseg import LiDSegModel  # noqa: E402
@@ -110,7 +110,8 @@ def layer_table(model: LiDSegModel, height: int = 1080, width: int = 1920) -> Li
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Parameter breakdown and per-module layer table.")
-    p.add_argument("--weights", type=Path, default=HERE / "lidseg_pidnetl_acdc.pth")
+    p.add_argument("--weights", type=Path,
+                   default=HERE.parent / "pretrained" / "lidseg_pidnetl_uber_tta_model.pth")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--layers", type=Path, default=None, help="write the layer table as CSV")
     args = p.parse_args()

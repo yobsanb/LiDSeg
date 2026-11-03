@@ -1,4 +1,4 @@
-"""Golden (fault-free) run of the LiDSeg PIDNet-L model on the ACDC validation set.
+"""Evaluate LiDSeg PIDNet-L on the ACDC validation set.
 
 One forward pass per image at the native 1080x1920 resolution, fp32 with TF32 disabled and
 deterministic cuDNN kernels, so repeated runs on one machine give bit-identical predictions.
@@ -8,11 +8,12 @@ classes. "all" pools the confusion matrices of the four conditions. Per image th
 also holds the pixel accuracy, the mIoU over the classes present in the label or the
 prediction, and an MD5 of the predicted label map.
 
-In the hand-off folder the defaults use its own weights and data/ACDC, and --reference
-compares the run with the shipped one (PASS / FAIL):
+Run from the repository root with downloaded weights and a local ACDC copy.
+Use --reference to compare with an existing report (PASS / FAIL):
 
-    python eval_acdc.py --reference reference_acdc_val.json
-    python eval_acdc.py --weights W.pth --acdc_root /data/ACDC [--out_json F] [--save_pred DIR]
+    python deploy/eval_acdc.py --weights W.pth --acdc_root /path/to/ACDC
+    python deploy/eval_acdc.py --weights W.pth --acdc_root /path/to/ACDC [--out_json F]
+        [--reference reference_acdc_val.json] [--save_pred DIR]
         [--conditions night] [--limit 10]
 """
 
@@ -136,11 +137,12 @@ def compare(report: dict, reference: Path) -> bool:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--weights", type=Path, default=HERE / "lidseg_pidnetl_acdc.pth")
-    p.add_argument("--acdc_root", type=Path, default=HERE / "data" / "ACDC")
+    p.add_argument("--weights", type=Path,
+                   default=HERE.parent / "pretrained" / "lidseg_pidnetl_uber_tta_model.pth")
+    p.add_argument("--acdc_root", type=Path, required=True)
     p.add_argument("--reference", type=Path, default=None,
                    help="reference report to compare with, e.g. reference_acdc_val.json")
-    p.add_argument("--out_json", type=Path, default=Path("golden_acdc_val.json"))
+    p.add_argument("--out_json", type=Path, default=Path("acdc_val.json"))
     p.add_argument("--save_pred", type=Path, default=None,
                    help="also write each predicted label map as a trainId PNG here")
     p.add_argument("--conditions", nargs="+", choices=CONDITIONS, default=list(CONDITIONS))

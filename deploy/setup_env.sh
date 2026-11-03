@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Only needed when PyTorch, NumPy or Pillow are missing: creates a virtual environment in
-# .venv here and installs requirements.txt into it. run_eval.sh uses .venv automatically.
+# Create an inference environment used automatically by run_eval.sh.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
