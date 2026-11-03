@@ -15,7 +15,7 @@ if [[ -z "$GPU_A" || -z "$GPU_B" ]]; then
     echo "set GPUS to two GPU ids, e.g. GPUS=0,1" >&2
     exit 1
 fi
-NAME=lidseg_pidnetl_acdc
+NAME=lidseg_pidnetl_uber
 BENCH=$REPO/output/acdc_benchmark
 CKPT=(--checkpoint "$STEP2/best.pth")
 mkdir -p "$BENCH"

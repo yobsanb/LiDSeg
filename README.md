@@ -65,7 +65,7 @@ $ACDC_ROOT/
 
 ## Pretrained Model
 
-Download [`lidseg_pidnetl_acdc.pth`](https://github.com/yobsanb/LiDSeg/releases/download/pidnetl-acdc/lidseg_pidnetl_acdc.pth) from the [release page](https://github.com/yobsanb/LiDSeg/releases/tag/pidnetl-acdc) into `pretrained/`.
+Download [`lidseg_pidnetl_uber.pth`](https://github.com/yobsanb/LiDSeg/releases/download/pidnetl-acdc/lidseg_pidnetl_uber.pth) from the [release page](https://github.com/yobsanb/LiDSeg/releases/tag/pidnetl-acdc) into `pretrained/`.
 
 ```bash
 python tools/infer.py --input image.png --output predictions/ --color
@@ -118,7 +118,7 @@ Output goes to `output/acdc_benchmark`.
 python evaluation/eval_cs_foggy.py --exp_dir output/cityscapes/pidnetl_guided
 
 # ACDC val, released model
-python tools/acdc_predict.py val --weights pretrained/lidseg_pidnetl_acdc.pth
+python tools/acdc_predict.py val --weights pretrained/lidseg_pidnetl_uber.pth
 ```
 
 ## Results

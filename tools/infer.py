@@ -16,7 +16,7 @@ sys.path.insert(0, str(REPO))
 
 from models.lidseg import LiDSegModel  # noqa: E402
 
-DEFAULT_WEIGHTS = REPO / "pretrained" / "lidseg_pidnetl_acdc.pth"
+DEFAULT_WEIGHTS = REPO / "pretrained" / "lidseg_pidnetl_uber.pth"
 CLASSES: Tuple[str, ...] = (
     "road", "sidewalk", "building", "wall", "fence", "pole", "traffic light",
     "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car",
